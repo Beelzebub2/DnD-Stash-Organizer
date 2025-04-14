@@ -1,25 +1,19 @@
 {
-    "name": "dark-and-darker-inventory-optimizer",
+    "name": "dark-and-darker-inventory",
     "version": "1.0.0",
     "description": "Inventory optimizer for Dark and Darker game",
     "main": "src/main/main.js",
     "scripts": {
-        "start": "electron .",
-        "dev": "electron . --dev"
+        "start": "electron ."
     },
     "author": "Beelzebub2",
     "license": "Apache-2.0",
-    "devDependencies": {
-        "electron": "^29.4.6"
-    },
     "dependencies": {
-        "axios": "^1.6.5",
-        "bootstrap": "^5.3.5",
-        "electron-screenshot": "^1.0.5",
-        "electron-store": "^8.1.0",
-        "jimp": "^0.22.12",
+        "bootstrap": "^5.3.0",
+        "electron": "^28.0.0",
+        "jimp": "^0.22.10",
         "pixelmatch": "^5.3.0",
         "seedrandom": "^3.0.5",
-        "sharp": "^0.34.1"
+        "sharp": "^0.33.2"
     }
 }

@@ -1,17 +1,4 @@
-const { ipcRenderer } = require('electron');
-const path = require('path');
-const fs = require('fs');
-
-// DOM Elements
-let captureBtn;
-let resultDisplay;
-let configForm;
-let xSlider, ySlider, widthSlider, heightSlider;
-let xValue, yValue, widthValue, heightValue;
-let debugModeToggle;
-let loadingIndicator;
-
-// Config
+// DOM initialization
 let currentConfig = {
     inventoryRegion: {
         x: 100,
@@ -22,122 +9,142 @@ let currentConfig = {
     debugMode: true
 };
 
-// Initialize UI when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-    initUI();
+    initTheme();
+    initRegionCapture();
+    initStatus();
+    initImages();
     loadConfig();
-    loadPreviousResults();
 });
 
-function initUI() {
-    // Get DOM elements
-    captureBtn = document.getElementById('capture-btn');
-    resultDisplay = document.getElementById('result-display');
-    configForm = document.getElementById('config-form');
-    xSlider = document.getElementById('region-x');
-    ySlider = document.getElementById('region-y');
-    widthSlider = document.getElementById('region-width');
-    heightSlider = document.getElementById('region-height');
-    xValue = document.getElementById('x-value');
-    yValue = document.getElementById('y-value');
-    widthValue = document.getElementById('width-value');
-    heightValue = document.getElementById('height-value');
-    debugModeToggle = document.getElementById('debug-mode');
-    loadingIndicator = document.getElementById('loading-indicator');
-
-    // Set up event listeners
-    captureBtn.addEventListener('click', captureScreen);
-
-    xSlider.addEventListener('input', updateConfigFromSliders);
-    ySlider.addEventListener('input', updateConfigFromSliders);
-    widthSlider.addEventListener('input', updateConfigFromSliders);
-    heightSlider.addEventListener('input', updateConfigFromSliders);
-
-    debugModeToggle.addEventListener('change', () => {
-        currentConfig.debugMode = debugModeToggle.checked;
-        updateConfig();
-    });
-
-    // Initialize tooltips
-    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(tooltipTriggerEl => {
-        new bootstrap.Tooltip(tooltipTriggerEl);
-    });
-
-    // Theme switching functionality
+// Theme management
+function initTheme() {
     const themeSwitcher = document.getElementById('theme-switcher');
     const body = document.body;
 
-    // Load saved theme preference
+    // Load saved theme
     const savedTheme = localStorage.getItem('theme') || 'dark';
-    body.classList.toggle('light-mode', savedTheme === 'light');
-    body.classList.toggle('dark-mode', savedTheme === 'dark');
+    body.classList.remove('dark-mode', 'light-mode');
+    body.classList.add(savedTheme === 'dark' ? 'dark-mode' : 'light-mode');
     themeSwitcher.checked = savedTheme === 'dark';
 
+    // Theme switch handler
     themeSwitcher.addEventListener('change', function () {
         const isDark = this.checked;
-        body.classList.toggle('light-mode', !isDark);
-        body.classList.toggle('dark-mode', isDark);
+        body.classList.remove('dark-mode', 'light-mode');
+        body.classList.add(isDark ? 'dark-mode' : 'light-mode');
         localStorage.setItem('theme', isDark ? 'dark' : 'light');
     });
+}
 
-    // Capture region functionality
-    const xPosition = document.getElementById('x-position');
-    const yPosition = document.getElementById('y-position');
-    const width = document.getElementById('width');
-    const height = document.getElementById('height');
-    const regionBox = document.getElementById('region-box');
+// Load config from main process
+async function loadConfig() {
+    try {
+        const response = await window.electronAPI.getConfig();
+        if (response.status === 'success') {
+            currentConfig = response.data;
+            updateRegionPreview(currentConfig.inventoryRegion);
+            console.log('Configuration loaded', currentConfig);
+        } else {
+            console.error('Error loading configuration:', response.message);
+            showError('Error loading configuration');
+        }
+    } catch (error) {
+        console.error('Failed to load config:', error);
+        showError('Failed to load configuration');
+    }
+}
 
-    // Load saved region settings
-    const savedRegion = JSON.parse(localStorage.getItem('captureRegion') || '{"x": 100, "y": 100, "width": 600, "height": 400}');
-    xPosition.value = savedRegion.x;
-    yPosition.value = savedRegion.y;
-    width.value = savedRegion.width;
-    height.value = savedRegion.height;
+// Initialize images with placeholders
+function initImages() {
+    ['original-image', 'annotated-image', 'optimized-image'].forEach(id => {
+        const img = document.getElementById(id);
+        if (img) {
+            const placeholderPath = '../../assets/placeholder.png';
+            img.src = placeholderPath;
+            console.log(`Setting placeholder for ${id}: ${placeholderPath}`);
 
-    // Update region preview and values
-    function updateRegionPreview() {
-        const x = parseInt(xPosition.value);
-        const y = parseInt(yPosition.value);
-        const w = parseInt(width.value);
-        const h = parseInt(height.value);
+            img.onerror = function () {
+                console.error(`Failed to load image: ${this.src}`);
+                this.src = placeholderPath;
+            };
+        }
+    });
+}
 
-        // Update region box position and size
-        regionBox.style.left = `${(x / 1920) * 100}%`;
-        regionBox.style.top = `${(y / 1080) * 100}%`;
-        regionBox.style.width = `${(w / 1920) * 100}%`;
-        regionBox.style.height = `${(h / 1080) * 100}%`;
+// Region capture management
+function initRegionCapture() {
+    const elements = {
+        xPosition: document.getElementById('x-position'),
+        yPosition: document.getElementById('y-position'),
+        width: document.getElementById('width'),
+        height: document.getElementById('height'),
+        regionBox: document.getElementById('region-box'),
+        captureBtn: document.getElementById('capture-btn'),
+        loading: document.getElementById('loading')
+    };
 
-        // Update value displays
-        document.getElementById('x-position-value').textContent = x;
-        document.getElementById('y-position-value').textContent = y;
-        document.getElementById('width-value').textContent = w;
-        document.getElementById('height-value').textContent = h;
-
-        // Save settings
-        localStorage.setItem('captureRegion', JSON.stringify({ x, y, width: w, height: h }));
+    // Validate all elements exist
+    if (Object.values(elements).some(el => !el)) {
+        console.error('Missing required elements for region capture');
+        return;
     }
 
-    // Initialize region preview
-    updateRegionPreview();
+    function updateRegionPreview(values = null) {
+        if (!values) {
+            values = {
+                x: parseInt(elements.xPosition.value),
+                y: parseInt(elements.yPosition.value),
+                width: parseInt(elements.width.value),
+                height: parseInt(elements.height.value)
+            };
+        } else {
+            // Update slider values from provided values
+            elements.xPosition.value = values.x;
+            elements.yPosition.value = values.y;
+            elements.width.value = values.width;
+            elements.height.value = values.height;
+        }
+
+        // Update region box visual position and size
+        elements.regionBox.style.left = `${(values.x / 1920) * 100}%`;
+        elements.regionBox.style.top = `${(values.y / 1080) * 100}%`;
+        elements.regionBox.style.width = `${(values.width / 1920) * 100}%`;
+        elements.regionBox.style.height = `${(values.height / 1080) * 100}%`;
+
+        // Update value displays
+        document.getElementById('x-position-value').textContent = values.x;
+        document.getElementById('y-position-value').textContent = values.y;
+        document.getElementById('width-value').textContent = values.width;
+        document.getElementById('height-value').textContent = values.height;
+
+        // Save settings
+        currentConfig.inventoryRegion = values;
+        localStorage.setItem('captureRegion', JSON.stringify(values));
+        window.electronAPI.updateConfig(currentConfig);
+
+        return values;
+    }
 
     // Add event listeners for sliders
-    [xPosition, yPosition, width, height].forEach(slider => {
-        slider.addEventListener('input', updateRegionPreview);
+    Object.values(elements).forEach(element => {
+        if (element.type === 'range') {
+            element.addEventListener('input', () => updateRegionPreview());
+        }
     });
 
     // Make region box draggable
     let isDragging = false;
-    let startX, startY;
-    let originalX, originalY;
+    let startX, startY, originalX, originalY;
 
-    regionBox.addEventListener('mousedown', function (e) {
+    elements.regionBox.addEventListener('mousedown', function (e) {
         isDragging = true;
         startX = e.clientX;
         startY = e.clientY;
-        originalX = parseInt(xPosition.value);
-        originalY = parseInt(yPosition.value);
-
-        regionBox.style.cursor = 'grabbing';
+        originalX = parseInt(elements.xPosition.value);
+        originalY = parseInt(elements.yPosition.value);
+        this.style.cursor = 'grabbing';
+        e.preventDefault();
     });
 
     document.addEventListener('mousemove', function (e) {
@@ -150,286 +157,137 @@ function initUI() {
         const scaleX = 1920 / previewRect.width;
         const scaleY = 1080 / previewRect.height;
 
-        const newX = Math.max(0, Math.min(1920 - parseInt(width.value), originalX + deltaX * scaleX));
-        const newY = Math.max(0, Math.min(1080 - parseInt(height.value), originalY + deltaY * scaleY));
+        elements.xPosition.value = Math.max(0, Math.min(1920 - parseInt(elements.width.value),
+            originalX + deltaX * scaleX));
+        elements.yPosition.value = Math.max(0, Math.min(1080 - parseInt(elements.height.value),
+            originalY + deltaY * scaleY));
 
-        xPosition.value = Math.round(newX);
-        yPosition.value = Math.round(newY);
         updateRegionPreview();
     });
 
     document.addEventListener('mouseup', function () {
         if (isDragging) {
             isDragging = false;
-            regionBox.style.cursor = 'move';
+            elements.regionBox.style.cursor = 'move';
         }
     });
 
-    // Capture functionality
-    captureBtn.addEventListener('click', async function () {
-        const region = {
-            x: parseInt(xPosition.value),
-            y: parseInt(yPosition.value),
-            width: parseInt(width.value),
-            height: parseInt(height.value)
-        };
+    // Initialize the preview with saved or default values
+    const savedRegion = JSON.parse(localStorage.getItem('captureRegion') || '{"x":100,"y":100,"width":600,"height":400}');
+    updateRegionPreview(savedRegion);
 
+    // Capture button functionality
+    elements.captureBtn.addEventListener('click', async () => {
         try {
-            loadingIndicator.classList.remove('d-none');
-            captureBtn.disabled = true;
+            elements.loading?.classList.remove('d-none');
+            elements.captureBtn.disabled = true;
 
-            // Send capture request to main process
+            const region = updateRegionPreview();
+            console.log("Capturing with region:", region);
+
             const result = await window.electronAPI.captureScreen(region);
+            console.log("Capture result:", result);
 
-            // Update images with results
-            document.getElementById('original-image').src = result.originalImage;
-            document.getElementById('annotated-image').src = result.annotatedImage;
-            document.getElementById('optimized-image').src = result.optimizedImage;
-
-            // Update items list
-            const itemsList = document.getElementById('items-list');
-            if (result.items && result.items.length > 0) {
-                itemsList.innerHTML = result.items
-                    .map(item => `<div class="items-list-item">
-                        <span class="material-icons me-2">${item.type === 'weapon' ? 'gavel' : 'shield'}</span>
-                        ${item.name}
-                    </div>`)
-                    .join('');
+            if (result.status === 'success') {
+                updateImages(result.data);
             } else {
-                itemsList.innerHTML = '<p>No items detected in this capture.</p>';
+                showError(`Capture failed: ${result.message}`);
             }
         } catch (error) {
             console.error('Capture failed:', error);
-            // Show error message
-            const errorDiv = document.createElement('div');
-            errorDiv.className = 'alert alert-danger mt-3';
-            errorDiv.innerHTML = `<span class="material-icons me-2">error</span> Capture failed: ${error.message}`;
-            document.querySelector('.card-body').appendChild(errorDiv);
-            setTimeout(() => errorDiv.remove(), 5000);
+            showError('Capture failed: ' + error.message);
         } finally {
-            loadingIndicator.classList.add('d-none');
-            captureBtn.disabled = false;
-        }
-    });
-
-    // Keyboard shortcut for capture
-    document.addEventListener('keydown', function (e) {
-        if (e.key === 'F12') {
-            e.preventDefault();
-            captureBtn.click();
+            elements.loading?.classList.add('d-none');
+            elements.captureBtn.disabled = false;
         }
     });
 }
 
-function updateConfigFromSliders() {
-    // Update values display
-    xValue.textContent = xSlider.value;
-    yValue.textContent = ySlider.value;
-    widthValue.textContent = widthSlider.value;
-    heightValue.textContent = heightSlider.value;
+// Update images after capture
+function updateImages(result) {
+    console.log("Updating images with result:", result);
 
-    // Update config
-    currentConfig.inventoryRegion = {
-        x: parseInt(xSlider.value),
-        y: parseInt(ySlider.value),
-        width: parseInt(widthSlider.value),
-        height: parseInt(heightSlider.value)
+    const images = {
+        'original-image': result.original,
+        'annotated-image': result.annotated,
+        'optimized-image': result.optimized
     };
 
-    updateConfig();
-}
-
-function updateSlidersFromConfig() {
-    // Update slider values
-    xSlider.value = currentConfig.inventoryRegion.x;
-    ySlider.value = currentConfig.inventoryRegion.y;
-    widthSlider.value = currentConfig.inventoryRegion.width;
-    heightSlider.value = currentConfig.inventoryRegion.height;
-
-    // Update display values
-    xValue.textContent = currentConfig.inventoryRegion.x;
-    yValue.textContent = currentConfig.inventoryRegion.y;
-    widthValue.textContent = currentConfig.inventoryRegion.width;
-    heightValue.textContent = currentConfig.inventoryRegion.height;
-
-    // Update debug mode toggle
-    debugModeToggle.checked = currentConfig.debugMode;
-}
-
-function loadConfig() {
-    ipcRenderer.send('get-config');
-
-    ipcRenderer.once('config-result', (event, response) => {
-        if (response.status === 'success') {
-            currentConfig = response.data;
-            updateSlidersFromConfig();
-            console.log('Configuration loaded', currentConfig);
-        } else {
-            console.error('Error loading configuration:', response.message);
-            showNotification('Error loading configuration', 'danger');
+    Object.entries(images).forEach(([id, src]) => {
+        const img = document.getElementById(id);
+        if (img && src) {
+            console.log(`Setting ${id} to ${src}`);
+            img.src = src;
+            img.onerror = function () {
+                console.error(`Failed to load image: ${this.src}`);
+                this.src = '../../assets/placeholder.png';
+            };
         }
     });
+
+    // Update items list if available
+    const itemsList = document.getElementById('items-list');
+    if (itemsList && result.items) {
+        itemsList.innerHTML = result.items && result.items.length > 0
+            ? result.items.map(item => `
+                <div class="items-list-item">
+                    <span class="material-icons me-2">${item.type === 'weapon' ? 'gavel' : 'shield'}</span>
+                    ${item.name}
+                </div>`).join('')
+            : '<p>No items detected in this capture.</p>';
+    } else if (itemsList) {
+        itemsList.innerHTML = '<p>No items detected in this capture.</p>';
+    }
 }
 
-function updateConfig() {
-    ipcRenderer.send('update-config', currentConfig);
+// Status management
+function initStatus() {
+    const statusElement = document.getElementById('server-status');
+    if (!statusElement) return;
 
-    ipcRenderer.once('config-update-result', (event, response) => {
-        if (response.status === 'success') {
-            console.log('Configuration updated', response.data);
-        } else {
-            console.error('Error updating configuration:', response.message);
-            showNotification('Error updating configuration', 'danger');
+    function updateStatus(isOnline) {
+        console.log(`Updating status: ${isOnline ? 'online' : 'offline'}`);
+        statusElement.className = isOnline ? 'status-online' : 'status-offline';
+        const statusText = statusElement.querySelector('span:last-child');
+        if (statusText) {
+            statusText.textContent = `Status: ${isOnline ? 'Online' : 'Offline'}`;
         }
+    }
+
+    // Listen for status updates from main process
+    window.electronAPI.onStatusUpdate((event, data) => {
+        console.log("Status update received:", data);
+        updateStatus(data.isOnline);
     });
+
+    // Set initial status
+    updateStatus(true);
 }
 
-function captureScreen() {
-    // Show loading indicator
-    loadingIndicator.style.display = 'block';
-    captureBtn.disabled = true;
-
-    // Clear previous results
-    resultDisplay.innerHTML = '';
-
-    ipcRenderer.send('capture-screen');
-
-    ipcRenderer.once('capture-result', (event, response) => {
-        // Hide loading indicator
-        loadingIndicator.style.display = 'none';
-        captureBtn.disabled = false;
-
-        if (response.status === 'success') {
-            const result = response.data;
-            displayResults(result);
-            console.log('Capture successful', result);
-        } else {
-            console.error('Error capturing screen:', response.message);
-            showNotification('Error capturing screen: ' + response.message, 'danger');
-        }
-
-        // Reload results list after capture
-        loadPreviousResults();
-    });
-}
-
-function displayResults(result) {
-    const { original, annotated, optimized } = result;
-
-    const resultHtml = `
-        <div class="row mb-4">
-            <div class="col-md-4">
-                <div class="card">
-                    <div class="card-header">Original Capture</div>
-                    <div class="card-body p-0">
-                        <img src="${original.replace(/\\/g, '/')}" class="img-fluid" alt="Original Inventory">
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="card">
-                    <div class="card-header">Detected Slots</div>
-                    <div class="card-body p-0">
-                        <img src="${annotated.replace(/\\/g, '/')}" class="img-fluid" alt="Detected Slots">
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="card">
-                    <div class="card-header">Optimized Layout</div>
-                    <div class="card-body p-0">
-                        <img src="${optimized.replace(/\\/g, '/')}" class="img-fluid" alt="Optimized Layout">
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-
-    resultDisplay.innerHTML = resultHtml;
-    showNotification('Inventory analyzed successfully!', 'success');
-}
-
-function loadPreviousResults() {
-    const resultsList = document.getElementById('previous-results');
-    if (!resultsList) return;
-
-    ipcRenderer.send('get-results');
-
-    ipcRenderer.once('results-data', (event, response) => {
-        if (response.status === 'success') {
-            const results = response.data;
-
-            if (results.length === 0) {
-                resultsList.innerHTML = '<div class="list-group-item">No previous results found</div>';
-                return;
-            }
-
-            let resultsHtml = '';
-
-            results.forEach(result => {
-                const timestamp = new Date(parseInt(result.timestamp));
-                const formattedDate = timestamp.toLocaleDateString() + ' ' + timestamp.toLocaleTimeString();
-                const slotCount = result.data.slots ? result.data.slots.length : 0;
-
-                resultsHtml += `
-                    <a href="#" class="list-group-item list-group-item-action load-result" data-timestamp="${result.timestamp}">
-                        <div class="d-flex w-100 justify-content-between">
-                            <h5 class="mb-1">Capture ${formattedDate}</h5>
-                            <small>${slotCount} slots detected</small>
-                        </div>
-                        <p class="mb-1">Click to view this result</p>
-                    </a>
-                `;
-            });
-
-            resultsList.innerHTML = resultsHtml;
-
-            // Add event listeners to result items
-            document.querySelectorAll('.load-result').forEach(item => {
-                item.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    const timestamp = e.currentTarget.getAttribute('data-timestamp');
-                    loadResult(timestamp, results);
-                });
-            });
-        } else {
-            console.error('Error loading previous results:', response.message);
-        }
-    });
-}
-
-function loadResult(timestamp, results) {
-    const result = results.find(r => r.timestamp === timestamp);
-    if (!result) return;
-
-    // Format paths for display
-    const baseDir = result.data.original ? result.data.original.substring(0, result.data.original.lastIndexOf('\\')) : '';
-
-    const resultData = {
-        original: `${baseDir}\\capture_${timestamp}.png`,
-        annotated: `${baseDir}\\annotated_${timestamp}.png`,
-        optimized: `${baseDir}\\optimized_${timestamp}.png`,
-    };
-
-    displayResults(resultData);
-}
-
-function showNotification(message, type = 'info') {
-    const alertContainer = document.getElementById('alert-container');
-
-    const alert = document.createElement('div');
-    alert.className = `alert alert-${type} alert-dismissible fade show`;
-    alert.setAttribute('role', 'alert');
-    alert.innerHTML = `
-        ${message}
+// Error handling
+function showError(message) {
+    console.error(message);
+    const alertDiv = document.createElement('div');
+    alertDiv.className = 'alert alert-danger alert-dismissible fade show';
+    alertDiv.innerHTML = `
+        <strong>Error:</strong> ${message}
         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
     `;
 
-    alertContainer.appendChild(alert);
-
-    // Auto-dismiss after 5 seconds
-    setTimeout(() => {
-        const bsAlert = new bootstrap.Alert(alert);
-        bsAlert.close();
-    }, 5000);
+    const cardBody = document.querySelector('.card-body');
+    if (cardBody) {
+        cardBody.appendChild(alertDiv);
+        setTimeout(() => alertDiv.remove(), 5000);
+    }
 }
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'F12') {
+        e.preventDefault();
+        const captureBtn = document.getElementById('capture-btn');
+        if (captureBtn && !captureBtn.disabled) {
+            captureBtn.click();
+        }
+    }
+});

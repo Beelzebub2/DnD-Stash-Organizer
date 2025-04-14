@@ -1,95 +1,61 @@
 # Dark and Darker Inventory Optimizer
 
-This application allows you to optimize your Dark and Darker inventory by capturing your screen, analyzing item sizes, and calculating the optimal arrangement of items in your inventory grid.
+> ⚠️ **Note**: This project is currently under active development. Features may be incomplete or subject to change.
 
-## Features
+An Electron-based application designed to help optimize inventory management in Dark and Darker.
 
-- Screen capture on hotkey press (default: F12)
-- Automatic detection of item slots and their sizes (1x1, 1x2, 2x2, 3x2, etc.)
-- Calculates and visualizes optimal inventory arrangement
-- History of past analyses
-- Configurable settings
+## Features (In Development)
 
-## Requirements
+- 🎨 Dark and Light theme support with Dark and Darker inspired aesthetics
+- 📷 Screen capture functionality for inventory analysis
+- 📏 Adjustable capture region with visual preview
+- 🔍 Inventory slot detection (WIP)
+- 📊 Inventory layout optimization (WIP)
+- 💾 Session history with previous captures
+- ⌨️ Keyboard shortcut support (F12 for quick capture)
 
-### For Backend (Python)
-- Python 3.7+
-- mss (for screen capture)
-- OpenCV (for image analysis)
-- Flask (for API server)
-- NumPy
-- pynput
+## Technical Details
 
-### For Frontend (Electron)
-- Node.js 14+ and npm
+Built with:
+- Electron
+- Node.js
+- HTML/CSS/JavaScript
+- Sharp for image processing
+- Bootstrap for UI components
+
+## Current Status
+
+This application is in early development. The following features are being worked on:
+
+- [x] Basic UI implementation
+- [x] Theme switching
+- [x] Screen capture region selection
+- [ ] Accurate inventory slot detection
+- [ ] Item recognition
+- [ ] Inventory optimization algorithm
+- [ ] Settings persistence
+- [ ] Performance optimizations
 
 ## Installation
 
-### Backend Setup
-
-1. Navigate to the backend directory:
-```
-cd backend
-```
-
-2. Install the required Python packages:
-```
-pip install -r requirements.txt
-```
-
-### Frontend Setup
-
-1. Navigate to the frontend directory:
-```
-cd frontend
-```
-
-2. Install the required npm packages:
-```
-npm install
-```
+1. Clone the repository
+2. Run `npm install` to install dependencies
+3. Run `npm start` or use the `start_app.bat` to launch the application
 
 ## Usage
 
-### Starting the Application
+Currently, the application supports:
+- Switching between dark and light themes
+- Adjusting the capture region using sliders or drag-and-drop
+- Capturing screen regions
+- Viewing capture history
 
-1. First, start the Python backend server:
-```
-cd backend
-python api.py
-```
+More features are actively being developed.
 
-2. Then, in a new terminal, start the Electron frontend:
-```
-cd frontend
-npm start
-```
+## Contributing
 
-### Using the Application
+As this project is under active development, contributions are welcome. Please ensure you test your changes thoroughly before submitting a pull request.
 
-1. When the application starts, it will check if the Python backend is running
-2. Click the "Capture Screen" button or press F12 to capture your inventory screen
-3. The application will analyze the image, detect item slots, and calculate the optimal arrangement
-4. View the results in the interface
-5. Access past analyses in the History tab
-6. Configure settings in the Settings tab
+## Disclaimer
 
-## Configuration
-
-You can configure the application in the Settings tab:
-
-- API URL: The URL where the Python backend is running (default: http://localhost:5000)
-- Capture Key: The key to press to capture the screen (default: F12)
-- Debug Mode: Enable/disable debug mode for additional visual output during analysis
-
-## Calibration
-
-For best results, you may need to calibrate the application to your specific Dark and Darker UI:
-
-1. Take a screenshot of your inventory
-2. In the Settings tab, click "Calibrate Inventory Region" 
-3. Follow the instructions to define the inventory area
-
-## License
-
-This project is licensed under the Apache License 2.0. See the LICENSE file for details.
+This application is a fan project and is not affiliated with or endorsed by the creators of Dark and Darker. All game-related content belongs to their respective owners.

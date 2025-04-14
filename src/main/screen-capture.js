@@ -26,7 +26,8 @@ class InventoryAnalyzer {
             },
             outputDir: path.join(__dirname, '../../captures'),
             slotDetectionThreshold: 0.7,
-            debugMode: true
+            debugMode: true,
+            sampleStep: 5 // Default sample step for performance
         };
 
         // Load configuration if it exists
@@ -37,7 +38,7 @@ class InventoryAnalyzer {
             fs.mkdirSync(this.config.outputDir, { recursive: true });
         }
 
-        console.log(`Inventory Analyzer initialized. Press ${this.config.captureKey} to capture inventory.`);
+        console.log(`Inventory Analyzer initialized with region:`, this.config.inventoryRegion);
     }
 
     loadConfig(configFile) {
@@ -64,10 +65,10 @@ class InventoryAnalyzer {
         }
     }
 
-    // ... existing code for detection and analysis ...
-
     async captureScreen() {
         try {
+            console.log("Capturing screen with region:", this.config.inventoryRegion);
+
             // Get primary display
             const primaryDisplay = screen.getPrimaryDisplay();
 
@@ -82,8 +83,9 @@ class InventoryAnalyzer {
 
             // Get the primary screen source
             const primarySource = sources.find(source =>
-                source.display_id === primaryDisplay.id.toString()
-            );
+                source.display_id === primaryDisplay.id.toString() ||
+                source.id.includes('screen:0')
+            ) || sources[0];
 
             if (!primarySource) {
                 throw new Error('Could not find primary display');
@@ -98,13 +100,29 @@ class InventoryAnalyzer {
             // Use Sharp to crop and process the image
             const sharpImage = sharp(imageBuffer);
 
+            // Log original image dimensions
+            const metadata = await sharpImage.metadata();
+            console.log(`Original image dimensions: ${metadata.width}x${metadata.height}`);
+
+            // Ensure region is valid
+            const region = { ...this.config.inventoryRegion }; // Clone the region object
+            console.log(`Cropping to region: ${JSON.stringify(region)}`);
+
+            // Check if region is within image bounds
+            if (region.x + region.width > metadata.width ||
+                region.y + region.height > metadata.height) {
+                console.warn("Region extends beyond image bounds, adjusting...");
+                region.width = Math.min(region.width, metadata.width - region.x);
+                region.height = Math.min(region.height, metadata.height - region.y);
+            }
+
             // Crop to the specified region
             const croppedImage = await sharpImage
                 .extract({
-                    left: this.config.inventoryRegion.x,
-                    top: this.config.inventoryRegion.y,
-                    width: this.config.inventoryRegion.width,
-                    height: this.config.inventoryRegion.height
+                    left: region.x,
+                    top: region.y,
+                    width: region.width,
+                    height: region.height
                 })
                 .toBuffer();
 
@@ -114,6 +132,7 @@ class InventoryAnalyzer {
 
             // Save the image
             await sharp(croppedImage).toFile(outputPath);
+            console.log(`Screenshot saved to ${outputPath}`);
 
             return outputPath;
         } catch (error) {
@@ -146,7 +165,7 @@ class InventoryAnalyzer {
             let pixelCount = 0;
 
             // Sample pixels for average brightness
-            const sampleStep = 5; // Sample every 5th pixel for performance
+            const sampleStep = this.config.sampleStep || 5; // Use configurable sample step or default to 5
             for (let y = 0; y < height; y += sampleStep) {
                 for (let x = 0; x < width; x += sampleStep) {
                     const pixel = Jimp.intToRGBA(image.getPixelColor(x, y));
@@ -702,8 +721,10 @@ class InventoryAnalyzer {
 
     async captureAndAnalyze() {
         try {
+            console.log("Starting captureAndAnalyze...");
             // Capture screen
             const imagePath = await this.captureScreen();
+            console.log(`Screen captured: ${imagePath}`);
 
             // Generate timestamp
             const timestamp = Date.now();
@@ -714,23 +735,40 @@ class InventoryAnalyzer {
             console.log(`Screenshot saved to ${capturePath}`);
 
             // Detect inventory grid
+            console.log("Detecting inventory grid...");
             const slotContours = await this.detectInventoryGrid(capturePath);
+            console.log(`Detected ${slotContours.length} slot contours`);
 
             // Analyze slot sizes
+            console.log("Analyzing slot sizes...");
             const { slots, annotatedPath } = await this.analyzeSlotSizes(slotContours, capturePath);
+            console.log(`Analyzed ${slots.length} slots, annotated image: ${annotatedPath}`);
 
             // Calculate optimal layout
+            console.log("Calculating optimal layout...");
             const { placement, grid } = this.optimizeInventoryLayout(slots);
+            console.log(`Created optimized layout with ${placement.length} items`);
 
             // Visualize optimized layout
+            console.log("Visualizing optimized layout...");
             const layoutPath = await this.visualizeOptimizedLayout(grid, placement);
+            console.log(`Layout visualization saved to ${layoutPath}`);
 
             console.log(`Analyzed ${slots.length} slots and created optimized layout`);
+
+            // Generate some sample items for the UI
+            const items = slots.map((slot, index) => ({
+                id: `item_${index}`,
+                name: `Item ${index + 1}`,
+                type: index % 2 === 0 ? 'weapon' : 'armor',
+                size: slot.size
+            }));
 
             // Save analysis results as JSON
             const results = {
                 timestamp,
                 slots,
+                items,
                 optimized_placement: placement
             };
 
@@ -742,10 +780,11 @@ class InventoryAnalyzer {
                 original: capturePath,
                 annotated: annotatedPath,
                 optimized: layoutPath,
+                items: items,
                 results: resultsPath
             };
         } catch (error) {
-            console.error('Error analyzing inventory:', error);
+            console.error('Error analyzing inventory:', error.stack);
             throw error;
         }
     }

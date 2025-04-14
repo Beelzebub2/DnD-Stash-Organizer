@@ -1,33 +1,35 @@
-const { app, BrowserWindow, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { captureScreen } = require('./screen-capture');
+const { InventoryAnalyzer } = require('./screen-capture');
 
 let mainWindow;
+let analyzer;
 
 function createWindow() {
     mainWindow = new BrowserWindow({
         width: 1200,
         height: 800,
         webPreferences: {
-            nodeIntegration: true,
-            contextIsolation: false
+            nodeIntegration: false,
+            contextIsolation: true,
+            preload: path.join(__dirname, '../preload.js')
         },
         icon: path.join(__dirname, '../../assets/logo.png')
     });
 
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+
+    // Initialize analyzer
+    analyzer = new InventoryAnalyzer();
+
+    // Send initial status
+    mainWindow.webContents.on('did-finish-load', () => {
+        mainWindow.webContents.send('status-update', { isOnline: true });
+    });
 }
 
-app.whenReady().then(() => {
-    createWindow();
-
-    app.on('activate', () => {
-        if (BrowserWindow.getAllWindows().length === 0) {
-            createWindow();
-        }
-    });
-});
+app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
@@ -35,42 +37,41 @@ app.on('window-all-closed', () => {
     }
 });
 
-// IPC handlers
-ipcMain.on('capture-screen', async (event, region) => {
+app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow();
+    }
+});
+
+// IPC Handlers
+ipcMain.handle('capture-screen', async (event, region) => {
     try {
         const timestamp = Date.now();
         const capturesDir = path.join(__dirname, '../../captures');
 
-        // Ensure captures directory exists
         if (!fs.existsSync(capturesDir)) {
             fs.mkdirSync(capturesDir, { recursive: true });
         }
 
-        // Capture and process screen
-        const result = await captureScreen(region, capturesDir, timestamp);
+        console.log('Capturing screen with region:', region);
+        const result = await analyzer.captureAndAnalyze();
+        console.log('Capture result:', result);
 
-        // Save results
-        const resultsPath = path.join(capturesDir, `results_${timestamp}.json`);
-        fs.writeFileSync(resultsPath, JSON.stringify(result, null, 2));
-
-        event.reply('capture-result', {
+        return {
             status: 'success',
-            data: {
-                timestamp,
-                ...result
-            }
-        });
+            data: result
+        };
     } catch (error) {
         console.error('Screen capture failed:', error);
-        event.reply('capture-result', {
+        return {
             status: 'error',
             message: error.message
-        });
+        };
     }
 });
 
 // Load config
-ipcMain.on('get-config', (event) => {
+ipcMain.handle('get-config', async (event) => {
     try {
         const configPath = path.join(__dirname, 'config.json');
         let config;
@@ -78,7 +79,6 @@ ipcMain.on('get-config', (event) => {
         if (fs.existsSync(configPath)) {
             config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
         } else {
-            // Default config
             config = {
                 inventoryRegion: {
                     x: 100,
@@ -91,38 +91,38 @@ ipcMain.on('get-config', (event) => {
             fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
         }
 
-        event.reply('config-result', {
+        return {
             status: 'success',
             data: config
-        });
+        };
     } catch (error) {
-        event.reply('config-result', {
+        return {
             status: 'error',
             message: error.message
-        });
+        };
     }
 });
 
 // Update config
-ipcMain.on('update-config', (event, newConfig) => {
+ipcMain.handle('update-config', async (event, newConfig) => {
     try {
         const configPath = path.join(__dirname, 'config.json');
         fs.writeFileSync(configPath, JSON.stringify(newConfig, null, 2));
-
-        event.reply('config-update-result', {
+        analyzer.config = { ...analyzer.config, ...newConfig };
+        return {
             status: 'success',
             data: newConfig
-        });
+        };
     } catch (error) {
-        event.reply('config-update-result', {
+        return {
             status: 'error',
             message: error.message
-        });
+        };
     }
 });
 
 // Get previous results
-ipcMain.on('get-results', (event) => {
+ipcMain.handle('get-results', async () => {
     try {
         const capturesDir = path.join(__dirname, '../../captures');
         const results = [];
@@ -134,23 +134,26 @@ ipcMain.on('get-results', (event) => {
             resultFiles.forEach(file => {
                 const filePath = path.join(capturesDir, file);
                 const timestamp = file.replace('results_', '').replace('.json', '');
-                const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-
-                results.push({
-                    timestamp,
-                    data
-                });
+                try {
+                    const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+                    results.push({
+                        timestamp,
+                        data
+                    });
+                } catch (err) {
+                    console.error(`Error reading file ${filePath}:`, err);
+                }
             });
         }
 
-        event.reply('results-data', {
+        return {
             status: 'success',
             data: results.sort((a, b) => b.timestamp - a.timestamp)
-        });
+        };
     } catch (error) {
-        event.reply('results-data', {
+        return {
             status: 'error',
             message: error.message
-        });
+        };
     }
 });
