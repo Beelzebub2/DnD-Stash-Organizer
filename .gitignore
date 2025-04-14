@@ -1,0 +1,52 @@
+# Node.js stuff
+frontend/node_modules/
+package-lock.json
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build output
+/dist/
+/build/
+/out/
+/release/
+
+# Electron rebuild files
+*.node
+
+# VSCode settings
+.vscode/
+
+# OS-specific
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment variables / Secrets
+.env
+.env.*
+
+# Logs
+logs/
+*.log
+*.log.*
+
+# Compiled source
+*.tsbuildinfo
+
+# Optional cache
+.cache/
+.nyc_output/
+coverage/
+
+# Electron Forge / Builder / Packager output
+make/
+tmp/
+*.tgz
+
+# Windows crap
+ehthumbs.db
+Icon?
+
+#Folders
+frontend/captures/

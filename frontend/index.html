@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dark and Darker Inventory Optimizer</title>
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="node_modules/bootstrap/dist/css/bootstrap.min.css">
+
+    <!-- Custom CSS -->
+    <style>
+        body {
+            background-color: #1a1a2e;
+            color: #e6e6e6;
+        }
+
+        .navbar {
+            background-color: #16213e;
+        }
+
+        .card {
+            background-color: #0f3460;
+            border: none;
+            margin-bottom: 20px;
+        }
+
+        .btn-primary {
+            background-color: #e94560;
+            border-color: #e94560;
+        }
+
+        .btn-primary:hover {
+            background-color: #c43851;
+            border-color: #c43851;
+        }
+
+        .grid-cell {
+            width: 50px;
+            height: 50px;
+            border: 1px solid #555;
+            display: inline-block;
+            background-color: #16213e;
+        }
+
+        .grid-container {
+            margin: 20px 0;
+        }
+
+        .image-container {
+            max-width: 100%;
+            margin-bottom: 15px;
+        }
+
+        .image-container img {
+            max-width: 100%;
+            border: 2px solid #333;
+            border-radius: 4px;
+        }
+
+        #server-status {
+            padding: 0.5rem;
+            border-radius: 0.25rem;
+            margin-bottom: 1rem;
+        }
+
+        .status-online {
+            background-color: #28a745;
+        }
+
+        .status-offline {
+            background-color: #dc3545;
+        }
+
+        .tab-content {
+            padding: 20px;
+            background-color: #0f3460;
+            border-radius: 0 0 5px 5px;
+        }
+
+        .nav-tabs .nav-link.active {
+            background-color: #0f3460;
+            border-color: #0f3460;
+            color: #fff;
+        }
+
+        .nav-tabs .nav-link {
+            color: #ccc;
+        }
+
+        .results-item {
+            cursor: pointer;
+            padding: 10px;
+            border-bottom: 1px solid #333;
+        }
+
+        .results-item:hover {
+            background-color: #16213e;
+        }
+
+        .selected {
+            background-color: #e94560;
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">
+                <img src="assets/logo.png" alt="Logo" height="30" class="d-inline-block align-text-top me-2">
+                Dark and Darker Inventory Optimizer
+            </a>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div id="server-status" class="status-offline">
+            Status: Initializing...
+        </div>
+
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Inventory Analysis</h5>
+                        <p class="card-text">Press the button below to capture your screen and analyze the inventory.
+                        </p>
+                        <button id="capture-btn" class="btn btn-primary">Capture Screen (F12)</button>
+                        <div id="loading" class="mt-3 d-none">
+                            <div class="spinner-border text-light" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <span class="ms-2">Processing...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <ul class="nav nav-tabs mt-4" id="myTab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="results-tab" data-bs-toggle="tab" data-bs-target="#results"
+                    type="button" role="tab" aria-controls="results" aria-selected="true">Results</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="history-tab" data-bs-toggle="tab" data-bs-target="#history" type="button"
+                    role="tab" aria-controls="history" aria-selected="false">History</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="settings-tab" data-bs-toggle="tab" data-bs-target="#settings" type="button"
+                    role="tab" aria-controls="settings" aria-selected="false">Settings</button>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="myTabContent">
+            <!-- Results Tab -->
+            <div class="tab-pane fade show active" id="results" role="tabpanel" aria-labelledby="results-tab">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h4>Original Capture</h4>
+                        <div class="image-container">
+                            <img id="original-image" src="assets/placeholder.png" alt="Original Capture"
+                                class="img-fluid">
+                        </div>
+
+                        <h4>Annotated Capture</h4>
+                        <div class="image-container">
+                            <img id="annotated-image" src="assets/placeholder.png" alt="Annotated Capture"
+                                class="img-fluid">
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <h4>Optimized Layout</h4>
+                        <div class="image-container">
+                            <img id="optimized-image" src="assets/placeholder.png" alt="Optimized Layout"
+                                class="img-fluid">
+                        </div>
+
+                        <h4>Detected Items</h4>
+                        <div id="items-list" class="mt-3">
+                            <p>No items detected yet. Press capture to analyze your inventory.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- History Tab -->
+            <div class="tab-pane fade" id="history" role="tabpanel" aria-labelledby="history-tab">
+                <div class="row">
+                    <div class="col-md-4">
+                        <h4>Past Results</h4>
+                        <div id="results-list" class="list-group">
+                            <p>No past results found.</p>
+                        </div>
+                    </div>
+
+                    <div class="col-md-8">
+                        <h4>Selected Result</h4>
+                        <div id="selected-result">
+                            <p>Select a result from the list to view details.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Tab -->
+            <div class="tab-pane fade" id="settings" role="tabpanel" aria-labelledby="settings-tab">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h4>Application Settings</h4>
+
+                        <div class="alert alert-info">
+                            This is a pure Electron application. All functionality is built directly into the app.
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <h4>Inventory Analyzer Settings</h4>
+
+                        <div class="mb-3">
+                            <label for="capture-key" class="form-label">Capture Key</label>
+                            <input type="text" class="form-control" id="capture-key" placeholder="f12">
+                            <div class="form-text text-light">Key to press to capture the screen</div>
+                        </div>
+
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="debug-mode">
+                            <label class="form-check-label" for="debug-mode">Debug Mode</label>
+                        </div>
+
+                        <button id="calibrate-btn" class="btn btn-warning">Calibrate Inventory Region</button>
+                        <button id="save-analyzer-settings-btn" class="btn btn-primary mt-2">Save Settings</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script for Bootstrap and custom JS -->
+    <script src="node_modules/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="renderer.js"></script>
+</body>
+
+</html>
