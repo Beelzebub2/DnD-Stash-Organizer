@@ -7,7 +7,7 @@ const seedrandom = require('seedrandom');
 const { ipcMain } = require('electron');
 
 // Create captures directory if it doesn't exist
-const outputDir = path.join(__dirname, 'captures');
+const outputDir = path.join(__dirname, '..', 'captures');
 if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });
 }
@@ -17,8 +17,13 @@ class InventoryAnalyzer {
         // Default configuration
         this.config = {
             captureKey: 'f12',
-            inventoryRegion: null,
-            outputDir: path.join(__dirname, 'captures'),
+            inventoryRegion: {
+                x: 100,
+                y: 100,
+                width: 600,
+                height: 400
+            },
+            outputDir: path.join(__dirname, '..', 'captures'),
             slotDetectionThreshold: 0.7,
             debugMode: true
         };
@@ -35,7 +40,7 @@ class InventoryAnalyzer {
     }
 
     loadConfig(configFile) {
-        const configPath = path.join(__dirname, configFile);
+        const configPath = path.join(__dirname, '..', configFile);
         try {
             if (fs.existsSync(configPath)) {
                 const configData = fs.readFileSync(configPath, 'utf8');
@@ -49,7 +54,7 @@ class InventoryAnalyzer {
     }
 
     saveConfig(configFile = 'config.json') {
-        const configPath = path.join(__dirname, configFile);
+        const configPath = path.join(__dirname, '..', configFile);
         try {
             fs.writeFileSync(configPath, JSON.stringify(this.config, null, 2));
             console.log(`Configuration saved to ${configFile}`);
@@ -99,13 +104,15 @@ class InventoryAnalyzer {
         }
     }
 
+    // ... existing code for detection and analysis ...
+
     async detectInventoryGrid(imagePath) {
         try {
             const image = await Jimp.read(imagePath);
-            
+
             // Convert image to grayscale
             image.greyscale();
-            
+
             // Enhance contrast for better edge detection
             image.contrast(0.2);
 
@@ -117,11 +124,11 @@ class InventoryAnalyzer {
 
             // Enhanced edge detection with adaptive threshold
             const baseThreshold = 35; // Start with a slightly lower threshold
-            
+
             // Calculate average brightness for adaptive thresholding
             let totalBrightness = 0;
             let pixelCount = 0;
-            
+
             // Sample pixels for average brightness
             const sampleStep = 5; // Sample every 5th pixel for performance
             for (let y = 0; y < height; y += sampleStep) {
@@ -131,10 +138,10 @@ class InventoryAnalyzer {
                     pixelCount++;
                 }
             }
-            
+
             const avgBrightness = totalBrightness / pixelCount;
             const adaptiveThreshold = baseThreshold * (1 + (avgBrightness / 255));
-            
+
             console.log(`Using adaptive threshold: ${adaptiveThreshold} (avg brightness: ${avgBrightness})`);
 
             // Apply Sobel-like edge detection (simplified)
@@ -152,11 +159,11 @@ class InventoryAnalyzer {
                     const br = Jimp.intToRGBA(image.getPixelColor(x + 1, y + 1)).r;
 
                     // Simplified Sobel-like operators
-                    const gx = (tr + 2*r + br) - (tl + 2*l + bl);
-                    const gy = (bl + 2*b + br) - (tl + 2*t + tr);
-                    
-                    const gradient = Math.sqrt(gx*gx + gy*gy);
-                    
+                    const gx = (tr + 2 * r + br) - (tl + 2 * l + bl);
+                    const gy = (bl + 2 * b + br) - (tl + 2 * t + tr);
+
+                    const gradient = Math.sqrt(gx * gx + gy * gy);
+
                     if (gradient > adaptiveThreshold) {
                         binaryImage.setPixelColor(0x000000ff, x, y); // Set black for edge pixels
                     }
@@ -175,7 +182,7 @@ class InventoryAnalyzer {
             for (let y = 2; y < height - 2; y++) {
                 for (let x = 2; x < width - 2; x++) {
                     const center = Jimp.intToRGBA(binaryImage.getPixelColor(x, y)).r;
-                    
+
                     // Only look at edge pixels (black)
                     if (center === 0) {
                         // Count black pixels in 5x5 neighborhood
@@ -192,7 +199,7 @@ class InventoryAnalyzer {
                                 }
                             }
                         }
-                        
+
                         // If there are too few black pixels in neighborhood, it's likely noise
                         if (blackCount < 3) {
                             denoisedImage.setPixelColor(0xffffffff, x, y); // Change to white (remove noise)
@@ -210,12 +217,12 @@ class InventoryAnalyzer {
             if (this.config.debugMode) {
                 // Create a debug image showing detected rectangles
                 const debugImage = await Jimp.read(imagePath);
-                
+
                 // Draw rectangles on debug image
                 for (const rect of contours) {
                     // Draw in yellow
                     const yellow = Jimp.rgbaToInt(255, 255, 0, 255);
-                    
+
                     // Draw rectangle border
                     for (let y = rect.y; y < rect.y + rect.height; y++) {
                         for (let x = rect.x; x < rect.x + rect.width; x++) {
@@ -231,7 +238,7 @@ class InventoryAnalyzer {
                         }
                     }
                 }
-                
+
                 // Highlight grid pattern in green
                 if (gridPattern.cells.length > 0) {
                     const green = Jimp.rgbaToInt(0, 255, 0, 255);
@@ -241,17 +248,17 @@ class InventoryAnalyzer {
                             if (cell.y >= 0 && cell.y < height && cell.x + i >= 0 && cell.x + i < width) {
                                 debugImage.setPixelColor(green, cell.x + i, cell.y);
                             }
-                            if (cell.y + cell.height - 1 >= 0 && cell.y + cell.height - 1 < height && 
+                            if (cell.y + cell.height - 1 >= 0 && cell.y + cell.height - 1 < height &&
                                 cell.x + i >= 0 && cell.x + i < width) {
                                 debugImage.setPixelColor(green, cell.x + i, cell.y + cell.height - 1);
                             }
                         }
-                        
+
                         for (let i = 0; i < cell.height; i++) {
                             if (cell.y + i >= 0 && cell.y + i < height && cell.x >= 0 && cell.x < width) {
                                 debugImage.setPixelColor(green, cell.x, cell.y + i);
                             }
-                            if (cell.y + i >= 0 && cell.y + i < height && 
+                            if (cell.y + i >= 0 && cell.y + i < height &&
                                 cell.x + cell.width - 1 >= 0 && cell.x + cell.width - 1 < width) {
                                 debugImage.setPixelColor(green, cell.x + cell.width - 1, cell.y + i);
                             }
@@ -277,28 +284,28 @@ class InventoryAnalyzer {
         if (rectangles.length < 4) {
             return { cells: [] };
         }
-        
+
         // Group rectangles by similar width and height
         const sizeGroups = {};
-        
+
         for (const rect of rectangles) {
             // Round width and height to nearest 10 pixels for grouping
             const keyWidth = Math.round(rect.width / 10) * 10;
             const keyHeight = Math.round(rect.height / 10) * 10;
             const key = `${keyWidth}x${keyHeight}`;
-            
+
             if (!sizeGroups[key]) {
                 sizeGroups[key] = [];
             }
-            
+
             sizeGroups[key].push(rect);
         }
-        
+
         // Find the group with most rectangles - this is likely our grid
         let largestGroup = [];
         let largestGroupSize = 0;
         let largestGroupKey = '';
-        
+
         for (const [key, group] of Object.entries(sizeGroups)) {
             if (group.length > largestGroupSize) {
                 largestGroupSize = group.length;
@@ -306,26 +313,26 @@ class InventoryAnalyzer {
                 largestGroupKey = key;
             }
         }
-        
+
         // If we don't have enough rectangles in our largest group, return all rectangles
         if (largestGroupSize < 4) {
             return { cells: rectangles };
         }
-        
+
         console.log(`Detected grid pattern with ${largestGroupSize} cells of size ${largestGroupKey}`);
-        
+
         // Analyze spatial distribution
         // Sort by x and y coordinates
         const sortedByX = [...largestGroup].sort((a, b) => a.x - b.x);
         const sortedByY = [...largestGroup].sort((a, b) => a.y - b.y);
-        
+
         // Calculate average width and height of cells
         const [width, height] = largestGroupKey.split('x').map(Number);
-        
+
         // Detect rows and columns
         const rows = [];
         const columns = [];
-        
+
         let lastY = -1000;
         for (const rect of sortedByY) {
             // If this rect is far from the last row's y position, it's a new row
@@ -337,7 +344,7 @@ class InventoryAnalyzer {
                 rows[rows.length - 1].push(rect);
             }
         }
-        
+
         let lastX = -1000;
         for (const rect of sortedByX) {
             // If this rect is far from the last column's x position, it's a new column
@@ -349,11 +356,11 @@ class InventoryAnalyzer {
                 columns[columns.length - 1].push(rect);
             }
         }
-        
+
         console.log(`Detected approximately ${rows.length} rows and ${columns.length} columns`);
-        
+
         // If we have a clear grid pattern, return the cells from the largest group
-        return { 
+        return {
             cells: largestGroup,
             rows: rows.length,
             columns: columns.length,
@@ -517,9 +524,6 @@ class InventoryAnalyzer {
                             if (y + i >= 0 && y + i < annotatedImage.getHeight() && x + width - 1 >= 0 && x + width - 1 < annotatedImage.getWidth())
                                 annotatedImage.setPixelColor(red, x + width - 1, y + i);
                         }
-
-                        // Add text is not possible with Jimp directly
-                        // We'll simulate it by marking the size code in a color pattern
                     }
                 }
 
@@ -670,9 +674,6 @@ class InventoryAnalyzer {
                     layoutImg.setPixelColor(white, (x + width) * cellSize - 1, y * cellSize + dy);
                     layoutImg.setPixelColor(white, (x + width) * cellSize - 2, y * cellSize + dy);
                 }
-
-                // Text not directly possible with Jimp
-                // We'll use a visual code instead
             }
 
             const timestamp = Date.now();
@@ -732,36 +733,13 @@ class InventoryAnalyzer {
             throw error;
         }
     }
-
-    calibrate(callback) {
-        console.log('Starting inventory region calibration...');
-        console.log('Please click at the top-left corner of your inventory...');
-
-        // In a real implementation, you would use a proper UI-based calibration
-        // This is a placeholder implementation
-
-        // For now, we'll set some dummy values
-        const topLeft = { x: 100, y: 100 };
-        const bottomRight = { x: 600, y: 400 };
-
-        this.config.inventoryRegion = {
-            x: topLeft.x,
-            y: topLeft.y,
-            width: bottomRight.x - topLeft.x,
-            height: bottomRight.y - topLeft.y
-        };
-
-        this.saveConfig();
-        console.log('Calibration complete!');
-
-        if (callback) callback(this.config.inventoryRegion);
-    }
 }
+
+// Create a shared analyzer instance
+const analyzer = new InventoryAnalyzer();
 
 // Setup IPC handlers for communicating with renderer process
 function setupIPC(mainWindow) {
-    const analyzer = new InventoryAnalyzer();
-
     ipcMain.on('capture-screen', async (event) => {
         try {
             const result = await analyzer.captureAndAnalyze();
@@ -786,16 +764,6 @@ function setupIPC(mainWindow) {
             event.reply('config-update-result', { status: 'success', data: analyzer.config });
         } catch (error) {
             event.reply('config-update-result', { status: 'error', message: error.message });
-        }
-    });
-
-    ipcMain.on('calibrate', (event) => {
-        try {
-            analyzer.calibrate((region) => {
-                event.reply('calibrate-result', { status: 'success', data: region });
-            });
-        } catch (error) {
-            event.reply('calibrate-result', { status: 'error', message: error.message });
         }
     });
 
@@ -832,4 +800,4 @@ function setupIPC(mainWindow) {
     });
 }
 
-module.exports = { InventoryAnalyzer, setupIPC };
+module.exports = { InventoryAnalyzer, setupIPC, analyzer };

@@ -1,12 +1,12 @@
 {
   "captureKey": "f12",
   "inventoryRegion": {
-    "x": 230,
+    "x": 1350,
     "y": 100,
     "width": 680,
-    "height": 800
+    "height": 1000
   },
-  "outputDir": "C:\\Users\\ricar\\Downloads\\Dark And Darker\\frontend\\captures",
+  "outputDir": "C:\\Users\\ricar\\Downloads\\Dark And Darker\\captures",
   "slotDetectionThreshold": 0.7,
   "debugMode": true
 }
